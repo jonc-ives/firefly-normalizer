@@ -50,6 +50,8 @@ class NormalizeConfig:
 ORIGINAL_HEAD = "[NORMALIZE"
 ORIGINAL_TAIL = "END]"
 
+NORMALIZE_TAG = "normalized"
+
 
 @dataclass(frozen=True)
 class TxnOriginal:
@@ -81,15 +83,24 @@ class TransactionProcessor:
         self._firefly = ffly
 
     @staticmethod
-    def _build_split(txn: dict, final: TxnFinal) -> TxnSplit:
+    def _merge_tags(tags: list[str] | None) -> list[str]:
+        current = list(tags or [])
+        if NORMALIZE_TAG not in current:
+            current.append(NORMALIZE_TAG)
+        return current
+
+    @classmethod
+    def _build_split(cls, txn: dict, final: TxnFinal) -> TxnSplit:
         tjid = str(txn["transaction_journal_id"])
         dest = final.merchant if txn.get("type") == "withdrawal" else None
         orig = TxnOriginal.from_txn(txn)
-        note = orig.merge_notes(txn.get("notes"))
+        notes = orig.merge_notes(txn.get("notes"))
+        tags = cls._merge_tags(txn.get("tags"))
         return TxnSplit(transaction_journal_id=tjid,
                 description=final.description,
                 destination_name=dest,
-                notes=note)
+                notes=notes,
+                tags=tags)
 
     async def _try_resolve(self, raw: str) -> TxnFinal | None:
         try:

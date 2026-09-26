@@ -13,6 +13,7 @@ class TxnSplit(BaseModel):
     description: str
     destination_name: str | None = None
     notes: str | None = None
+    tags: list[str] | None = None
 
 
 class TransactionUpdate(BaseModel):
