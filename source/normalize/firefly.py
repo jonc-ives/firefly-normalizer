@@ -12,6 +12,7 @@ class TxnSplit(BaseModel):
     transaction_journal_id: str
     description: str
     destination_name: str | None = None
+    notes: str | None = None
 
 
 class TransactionUpdate(BaseModel):
