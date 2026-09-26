@@ -1,0 +1,41 @@
+#!venv/bin/python3
+""""""
+from argparse import ArgumentParser
+from sys import argv
+
+from source import WebhookServer, WebhookConfig
+from source import FeatureNormalize, NormalizeConfig
+
+VERSION = "0.1.0"
+
+DESC_MAIN = "Run the firefly webhook server"
+DESC_RELO = "Auto-reload on source code changes"
+
+
+def __cli_arguments(argl: list):
+    ap = ArgumentParser(description=DESC_MAIN)
+    ap.add_argument("--host", type=str, default="0.0.0.0")
+    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--reload", action="store_true", help=DESC_RELO)
+    ap.add_argument("--level", type=str, default="info")
+    return ap.parse_args(argl)
+
+
+def start(argl: list):
+    args = __cli_arguments(argl)
+    runs = WebhookServer(WebhookConfig(
+        uvi_host=args.host,
+        uvi_port=args.port,
+        uvi_level=args.level,
+        uvi_access_log=False,
+        api_title="Firefly Normalizer",
+        api_version=VERSION,
+        api_prefix="/api/v1")
+    )
+
+    runs.enable(FeatureNormalize, NormalizeConfig.from_env())
+    runs.start()
+
+
+if __name__ == "__main__":
+    raise SystemExit(start(argv[1:]))
