@@ -135,7 +135,7 @@ class FeatureNormalize(WebhookFeature):
 
         self.processor = None
 
-    async def receive(self, req: Request, bg: BackgroundTasks) -> None:
+    async def receive(self, req: Request, bg: BackgroundTasks) -> dict:
         """"""
         body = await req.body()
         wh_key = self.config.webhook_key
