@@ -47,60 +47,10 @@ class NormalizeConfig:
         )
 
 
-ORIGINAL_HEAD = "[NORMALIZE"
-ORIGINAL_TAIL = "END]"
-
-NORMALIZE_TAG = "normalized"
-
-
-@dataclass(frozen=True)
-class TxnOriginal:
-    description: str
-    destination: str | None
-
-    @classmethod
-    def from_txn(cls, txn: dict) -> "TxnOriginal":
-        return cls(description=txn.get("description", ""),
-                   destination=txn.get("destination_name"))
-
-    def render(self) -> str:
-        return " ".join((
-            ORIGINAL_HEAD,
-            f"description: {self.description} "
-            f"destination: {self.destination or ''}",
-            ORIGINAL_TAIL))
-
-    def merge_notes(self, notes: str | None) -> str:
-        current = (notes or "").strip()
-        if ORIGINAL_HEAD in current:
-            return current
-        return f"{current}{' '*10}{self.render()}" if current else self.render()
-
-
 class TransactionProcessor:
     def __init__(self, rslv: TransactionResolver, ffly: FireflyClient):
         self._resolver = rslv
         self._firefly = ffly
-
-    @staticmethod
-    def _merge_tags(tags: list[str] | None) -> list[str]:
-        current = list(tags or [])
-        if NORMALIZE_TAG not in current:
-            current.append(NORMALIZE_TAG)
-        return current
-
-    @classmethod
-    def _build_split(cls, txn: dict, final: TxnFinal) -> TxnSplit:
-        tjid = str(txn["transaction_journal_id"])
-        dest = final.merchant if txn.get("type") == "withdrawal" else None
-        orig = TxnOriginal.from_txn(txn)
-        notes = orig.merge_notes(txn.get("notes"))
-        tags = cls._merge_tags(txn.get("tags"))
-        return TxnSplit(transaction_journal_id=tjid,
-                description=final.description,
-                destination_name=dest,
-                notes=notes,
-                tags=tags)
 
     async def _try_resolve(self, raw: str) -> TxnFinal | None:
         try:
@@ -121,7 +71,7 @@ class TransactionProcessor:
             if not (final := await self._try_resolve(raw)):
                 continue
 
-            split = self._build_split(txn, final)
+            split = self._firefly._build_split(txn, final)
             splits.append(split)
             log.info("group %s: %r -> %s", group_id,
                      raw, split.model_dump(exclude_none=True))
