@@ -28,6 +28,7 @@ class TransactionUpdate(BaseModel):
 ORIGINAL_HEAD = "[NORMALIZE"
 ORIGINAL_TAIL = "END]"
 
+
 @dataclass(frozen=True)
 class TxnOriginal:
     description: str
