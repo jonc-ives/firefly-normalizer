@@ -12,7 +12,7 @@ import json
 import logging
 import os
 
-from ..webhook import WebhookFeature
+from .webhook import WebhookFeature
 from .firefly import TxnSplit, FireflyClient
 from .resolver import TxnFinal, TransactionResolver
 
