@@ -93,7 +93,7 @@ class TransferMatcher:
             return None
 
         usable.sort(key=lambda c: abs((_date(c) - _date(txn)).days))
-        if len(usable > 1):
+        if len(usable) > 1:
             span_recent = abs((_date(usable[0]) - _date(txn)).days)
             span_later = abs((_date(usable[1]) - _date(txn)).days)
             if span_recent == span_later:

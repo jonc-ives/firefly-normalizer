@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from pydantic import BaseModel
+from typing import TYPE_CHECKING
 
 import logging
 import httpx
 
 from .resolver import TxnFinal
-from .transfer import TxnTransfer
+
+if TYPE_CHECKING:
+    from .transfer import TxnTransfer
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -57,12 +60,12 @@ class TxnOriginal:
             f"description: {self.description} ",
             f"source: {self.source or ''}",
             f"destination: {self.destination or ''}",
-            f"external_id: {self.external_id} or ''",
+            f"external_id: {self.external_id or ''}",
             ORIGINAL_TAIL))
 
     def merge_notes(self, notes: str | None) -> str:
         current = (notes or "").strip()
-        if ORIGINAL_HEAD in current:
+        if f"journal: {self.journal_id} " in current:
             return current
         return f"{current} {self.render()}" if current else self.render()
 
@@ -119,10 +122,10 @@ class FireflyClient:
         notes = TxnOriginal.from_txn(
             to_survive).merge_notes(to_survive.get("notes"))
         notes = TxnOriginal.from_txn(to_delete).merge_notes(notes)
-        tags = [*(to_survive.get("tags", [])), *(to_delete.get("tags"), [])]
+        tags = [*(to_survive.get("tags", [])), *(to_delete.get("tags", []))]
         tags = cls._merge_tags(tags, add=(TRANSFER_TAG,), drop=(PENDING_TAG,))
         return TxnSplit(transaction_journal_id=tjid,
-                        type="tansfer",
+                        type="transfer",
                         date=final.date,
                         source_id=final.source_id,
                         destination_id=final.destination_id,
@@ -135,7 +138,7 @@ class FireflyClient:
         add: tuple[str, ...] = (NORMALIZE_TAG,),
         drop: tuple[str, ...] = ()
     ) -> list[str]:
-        current = [t for t in dict.fromkeys(tags, []) if t not in drop]
+        current = [t for t in dict.fromkeys(tags or []) if t not in drop]
         for tag in add:
             if tag not in current:
                 current.append(tag)
@@ -144,6 +147,8 @@ class FireflyClient:
     async def get_group(self, group_id: int) -> dict | None:
         rpath = f"{self._url}/api/v1/transactions/{group_id}"
         response = await self._http.get(rpath, headers=self._headers())
+        if response.status_code == 404:
+            return
         if response.status_code >= 400:
             log.error("firefly fetch failed (%s) : %s",
                       response.status_code, response.text)
@@ -171,13 +176,14 @@ class FireflyClient:
         if response.status_code >= 400:
             log.error("firefly update failed (%s): %s",
                       response.status_code, response.text)
-            return
         response.raise_for_status()
 
     async def delete_group(self, group_id: int) -> None:
         rpath = f"{self._url}/api/v1/transactions/{group_id}"
         response = await self._http.delete(rpath, headers=self._headers())
-        if response.status_code != 404 and response.status_code >= 400:
+        if response.status_code == 404:
+            return
+        if response.status_code >= 400:
             log.error("firefly delete failed (%s): %s",
                       response.status_code, response.text)
         response.raise_for_status()

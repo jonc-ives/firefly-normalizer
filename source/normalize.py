@@ -48,7 +48,7 @@ class NormalizeConfig:
             webhook_key=cls._from_env("WEBHOOK_KEY"),
             ollama_model=cls._from_env("OLLAMA_MODEL"),
             ollama_url=cls._from_env("OLLAMA_URL"),
-            transfer_patterns=cls._from_env("TRANSFER_PATTERS", ""),
+            transfer_patterns=cls._from_env("TRANSFER_PATTERNS", ""),
             transfer_window=int(cls._from_env("TRANSFER_WINDOW_DAYS", 5))
         )
 
@@ -84,6 +84,11 @@ class TransactionProcessor:
         if group is None:
             return
 
+        if len(group["transactions"]) != 1:
+            log.warning("group %s has %d splits; skipping transfer match",
+                        group_id, len(group["transactions"]))
+            return
+
         txn = group["transactions"][0]
         forwd = (txn["type"] in MAP_ASSET)
         backd = (TRANSFER_TAG in (txn.get("tags") or []))
@@ -116,7 +121,7 @@ class TransactionProcessor:
         txns = group.get("transactions", [])
 
         if self._transfer.matches(txns[0].get("description", "")):
-            self._process_transfer(group_id)
+            await self._process_transfer(group_id)
             return
 
         splits: list[TxnSplit] = []
