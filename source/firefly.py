@@ -17,7 +17,7 @@ log = logging.getLogger("normalize:firefly")
 
 class TxnSplit(BaseModel):
     transaction_journal_id: str
-    description: str | None
+    description: str | None = None
     type: str | None = None
     date: str | None = None
     source_id: str | None = None
@@ -97,7 +97,7 @@ class FireflyClient:
         return {"id": group_id, "transactions": splits}
 
     @classmethod
-    def _build_split(cls, txn: dict, final: TxnFinal) -> TxnSplit:
+    def build_split(cls, txn: dict, final: TxnFinal) -> TxnSplit:
         tjid = str(txn["transaction_journal_id"])
         dest = final.merchant if txn.get("type") == "withdrawal" else None
         orig = TxnOriginal.from_txn(txn)
