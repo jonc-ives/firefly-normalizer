@@ -17,7 +17,7 @@ log = logging.getLogger("normalize:firefly")
 
 class TxnSplit(BaseModel):
     transaction_journal_id: str
-    description: str
+    description: str | None
     type: str | None = None
     date: str | None = None
     source_id: str | None = None
@@ -56,8 +56,8 @@ class TxnOriginal:
     def render(self) -> str:
         return " ".join((
             ORIGINAL_HEAD,
-            f"journal: {self.journal_id} ",
-            f"description: {self.description} ",
+            f"journal: {self.journal_id}",
+            f"description: {self.description}",
             f"source: {self.source or ''}",
             f"destination: {self.destination or ''}",
             f"external_id: {self.external_id or ''}",
@@ -122,7 +122,8 @@ class FireflyClient:
         notes = TxnOriginal.from_txn(
             to_survive).merge_notes(to_survive.get("notes"))
         notes = TxnOriginal.from_txn(to_delete).merge_notes(notes)
-        tags = [*(to_survive.get("tags", [])), *(to_delete.get("tags", []))]
+        tags = [*(to_survive.get("tags") or []),
+                *(to_delete.get("tags") or [])]
         tags = cls._merge_tags(tags, add=(TRANSFER_TAG,), drop=(PENDING_TAG,))
         return TxnSplit(transaction_journal_id=tjid,
                         type="transfer",

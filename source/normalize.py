@@ -120,7 +120,7 @@ class TransactionProcessor:
         group_id = group["id"]
         txns = group.get("transactions", [])
 
-        if self._transfer.matches(txns[0].get("description", "")):
+        if txns and self._transfer.matches(txns[0].get("description", "")):
             await self._process_transfer(group_id)
             return
 
