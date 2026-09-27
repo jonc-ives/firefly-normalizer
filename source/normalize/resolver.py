@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from dataclasses import dataclass
 
+import asyncio
 import httpx
 
 SYSTEM_PROMPT = """You clean up messy financial transaction fields
@@ -74,7 +75,15 @@ class TxnFinal:
 
 
 class TransactionResolver:
-    def __init__(self, http: httpx.AsyncClient, url: str, model: str):
+    def __init__(self,
+        http: httpx.AsyncClient,
+        url: str,
+        model: str,
+        parallel: int = 1,
+        timeout: float = 300
+    ):
+        self._timeout = httpx.Timeout(10, read=timeout)
+        self._gate = asyncio.Semaphore(parallel)
         self._model = model
         self._http = http
         self._url = url
@@ -85,13 +94,22 @@ class TransactionResolver:
             ChatMessage(role="user", content=description)
         ]
 
+    async def _post_once(self, rpath: str, body: dict) -> httpx.Response:
+        return await self._http.post(rpath, json=body, timeout=self._timeout)
+
+    async def _post(self, rpath: str, body: dict) -> httpx.Response:
+        try:
+            return await self._post_once(rpath, body)
+        except httpx.TimeoutException:
+            return await self._post_once(rpath, body)
+
     async def resolve(self, description: str) -> TxnFinal:
         request = ChatRequest(
             model=self._model, messages=self._messages(description))
         
         rpath = f"{self._url}/api/chat"
-        response = await self._http.post(
-            rpath, json=request.model_dump(), timeout=120)
+        async with self._gate:
+            response = await self._post(rpath, request.model_dump())
         response.raise_for_status()
 
         reply = ChatResponse.model_validate(response.json())
