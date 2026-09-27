@@ -120,24 +120,28 @@ class TransactionProcessor:
         group_id = group["id"]
         txns = group.get("transactions", [])
 
-        if txns and self._transfer.matches(txns[0].get("description", "")):
+        if txns and self._transfer.matches(txns[0]):
             await self._process_transfer(group_id)
             return
 
         splits: list[TxnSplit] = []
+        resolved = 0
 
-        for txn in group.get("transactions", []):
-            if not (raw := txn.get("description", "")):
-                continue
-            if not (final := await self._try_resolve(raw)):
+        for txn in txns:
+            tjid = str(txn["transaction_journal_id"])
+            raw = txn.get("description", "")
+            final = await self._try_resolve(raw) if raw else None
+            if final is None:
+                splits.append(TxnSplit(transaction_journal_id=tjid))
                 continue
 
-            split = self._firefly._build_split(txn, final)
+            split = self._firefly.build_split(txn, final)
             splits.append(split)
+            resolved += 1
             log.info("group %s: %r -> %s", group_id,
                      raw, split.model_dump(exclude_none=True))
 
-        if not splits:
+        if not resolved:
             return
 
         try:
