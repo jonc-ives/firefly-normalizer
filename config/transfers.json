@@ -1,0 +1,28 @@
+[
+  {"type": "deposit",    "pattern": "PAYMENT\\W*(RECEIVED\\W*)?-*\\s*THANK\\W*YOU"},
+  {"type": "deposit",    "pattern": "AUTOPAY AUTO-PMT"},
+  {"type": "deposit",    "pattern": "DIRECTPAY (FULL BALANCE|MINIMUM PAYMENT)"},
+  {"type": "deposit",    "pattern": "CAPITAL ONE (ONLINE|AUTOPAY|MOBILE) PYMT"},
+
+  {"type": "withdrawal", "pattern": "CHASE CREDIT CRD|CHASE (DES:)?(EPAY|AUTOPAY)"},
+  {"type": "withdrawal", "pattern": "CITI (AUTOPAY|CARD ONLINE)"},
+  {"type": "withdrawal", "pattern": "AMEX EPAYMENT"},
+  {"type": "withdrawal", "pattern": "DISCOVER (DES:)?E-PAYMENT"},
+  {"type": "withdrawal", "pattern": "CAPITAL ?ONE (CRCARDPMT|DES:(ONLINE|MOBILE) PMT|N\\.A\\. WEB)"},
+  {"type": "withdrawal", "pattern": "BK OF AMER VI/MC"},
+  {"type": "withdrawal", "pattern": "BARCLAYCARD"},
+  {"type": "withdrawal", "pattern": "SYNCB PAYMENT|SYNCHRONY( BANK)? (CC PYMT|CREDIT CARD PAYMENT|CREDIT CARD WEB PAY|ONLINE PAYMENT)|SYNCHRONYBANKCCPYMT|(WEB PYMT|ACH PAYMENT) SYNCHRONY"},
+  {"type": "withdrawal", "pattern": "APPLECARD GSBANK"},
+  {"type": "withdrawal", "pattern": "WELLS FARGO CARD|WF CREDIT CARD"},
+  {"type": "withdrawal", "pattern": "US BANK DES:WEB PMTS|U\\.S\\. BANK CREDIT CARD"},
+  {"type": "withdrawal", "pattern": "(USAA|NAVY FEDERAL|PENFED) CREDIT CARD (PAYMENT|PMT)"},
+
+  {"type": "*", "pattern": "INTERNET BANKING TRANSFER (WITHDRAWAL|DEPOSIT)"},
+  {"type": "*", "pattern": "TRANSFER (DEPOSIT FROM|WITHDRAWAL TO) ACCOUNT"},
+  {"type": "*", "pattern": "ONLINE (BANKING )?TRANSFER (TO|FROM) (CHK|SAV|CHECKING|SAVINGS)"},
+  {"type": "*", "pattern": "ONLINE TRANSFER REF #\\w+ (TO|FROM) (CHECKING|SAVINGS)"},
+  {"type": "*", "pattern": "INTERNET TRANSFER (TO|FROM) .+ ACCOUNT"},
+  {"type": "*", "pattern": "TRANSFER (TO|FROM) 360 "},
+  {"type": "*", "pattern": "FUNDS TRANSFER (TO|FROM)"},
+  {"type": "*", "pattern": "\\b(XFER|TFR) (TO|FROM)\\b"}
+]

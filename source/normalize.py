@@ -1,10 +1,11 @@
 """"""
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
+from fastapi import Request, BackgroundTasks, HTTPException
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Optional
 
+import asyncio
 import hashlib
 import hmac
 import httpx
@@ -12,9 +13,10 @@ import json
 import logging
 import os
 
-from ..webhook import WebhookFeature
-from .firefly import TxnSplit, FireflyClient
+from .webhook import WebhookFeature
+from .firefly import TxnSplit, FireflyClient, TRANSFER_TAG
 from .resolver import TxnFinal, TransactionResolver
+from .transfer import TxnTransfer, TransferMatcher, MAP_ASSET
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -28,6 +30,8 @@ class NormalizeConfig:
     webhook_key: str
     ollama_model: str
     ollama_url: str
+    transfer_patterns: str = ""
+    transfer_window: int = 5
 
     @staticmethod
     def _from_env(env: str, default: Any = None) -> Any:        
@@ -43,14 +47,19 @@ class NormalizeConfig:
             firefly_key=cls._from_env("FIREFLY_KEY"),
             webhook_key=cls._from_env("WEBHOOK_KEY"),
             ollama_model=cls._from_env("OLLAMA_MODEL"),
-            ollama_url=cls._from_env("OLLAMA_URL")
+            ollama_url=cls._from_env("OLLAMA_URL"),
+            transfer_patterns=cls._from_env("TRANSFER_PATTERNS", ""),
+            transfer_window=int(cls._from_env("TRANSFER_WINDOW_DAYS", 5))
         )
 
 
 class TransactionProcessor:
-    def __init__(self, rslv: TransactionResolver, ffly: FireflyClient):
+    def __init__(self, rslv: TransactionResolver,
+                 ffly: FireflyClient, xfer: TransferMatcher):
         self._resolver = rslv
         self._firefly = ffly
+        self._transfer = xfer
+        self._lock = asyncio.Lock()
 
     async def _try_resolve(self, raw: str) -> TxnFinal | None:
         try:
@@ -61,22 +70,78 @@ class TransactionProcessor:
         
         return final
 
+    async def _try_transfer(self, txn: dict) -> TxnTransfer | None:
+        try:
+            final = await self._transfer.resolve(txn)
+        except Exception as e:
+            log.error("transfer match failed for journal %s: %s",
+                      txn["transaction_journal_id"], e)
+            final = None
+        return final
+
+    async def _do_process_transfer(self, group_id: int) -> None:
+        group = await self._firefly.get_group(group_id)
+        if group is None:
+            return
+
+        if len(group["transactions"]) != 1:
+            log.warning("group %s has %d splits; skipping transfer match",
+                        group_id, len(group["transactions"]))
+            return
+
+        txn = group["transactions"][0]
+        forwd = (txn["type"] in MAP_ASSET)
+        backd = (TRANSFER_TAG in (txn.get("tags") or []))
+        if not forwd or backd:
+            return
+
+        if final := await self._try_transfer(txn):
+            split = self._firefly._build_transfer_split(final)
+            await self._firefly.update_transaction(
+                final.to_survive_group, [split])
+            await self._firefly.delete_group(final.to_delete_group)
+            log.info("group %s merged into %s: %s", final.to_delete_group,
+                     final.to_survive_group, final.description)
+            return
+
+        split = self._firefly._build_pending_split(txn)
+        await self._firefly.update_transaction(group_id, [split])
+        log.info("group %s: no counterpart, tagged pending", group_id)
+
+    async def _process_transfer(self, group_id: int) -> None:
+        async with self._lock:
+            try:
+                await self._do_process_transfer(group_id)
+            except Exception as e:
+                log.error("transfer of group %s failed: %s", group_id, e)
+        return
+
     async def process(self, group: dict) -> None:
         group_id = group["id"]
+        txns = group.get("transactions", [])
+
+        if txns and self._transfer.matches(txns[0]):
+            await self._process_transfer(group_id)
+            return
+
         splits: list[TxnSplit] = []
+        resolved = 0
 
-        for txn in group.get("transactions", []):
-            if not (raw := txn.get("description", "")):
-                continue
-            if not (final := await self._try_resolve(raw)):
+        for txn in txns:
+            tjid = str(txn["transaction_journal_id"])
+            raw = txn.get("description", "")
+            final = await self._try_resolve(raw) if raw else None
+            if final is None:
+                splits.append(TxnSplit(transaction_journal_id=tjid))
                 continue
 
-            split = self._firefly._build_split(txn, final)
+            split = self._firefly.build_split(txn, final)
             splits.append(split)
+            resolved += 1
             log.info("group %s: %r -> %s", group_id,
                      raw, split.model_dump(exclude_none=True))
 
-        if not splits:
+        if not resolved:
             return
 
         try:
@@ -122,7 +187,9 @@ class FeatureNormalize(WebhookFeature):
                         self.config.firefly_key)
             rslv = TransactionResolver(http, self.config.ollama_url,
                         self.config.ollama_model)
-            self.processor = TransactionProcessor(rslv, ffly)
+            xfer = TransferMatcher(ffly, self.config.transfer_patterns,
+                        self.config.transfer_window)
+            self.processor = TransactionProcessor(rslv, ffly, xfer)
             yield
 
         self.processor = None
